@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+  <meta charset="UTF-8">
+  <title>canlı konum 2</title>
+  
+
+</head>
+<body>
+<!-- partial:index.partial.html -->
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Canlı Konum Paylaşan Harita</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+  <style>
+    html, body {
+      margin: 0; padding: 0; height: 100%; width: 100%; font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    #map {
+      height: 100vh;
+      width: 100vw;
+    }
+    #control-panel {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 1100;
+      background: white;
+      padding: 12px 15px;
+      border-radius: 10px;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+      font-size: 14px;
+      max-width: 320px;
+      max-height: 90vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #nearest-list {
+      margin-top: 10px;
+      max-height: 180px;
+      overflow-y: auto;
+      border-top: 1px solid #ddd;
+      padding-top: 8px;
+    }
+    button {
+      cursor: pointer;
+      padding: 8px 12px;
+      font-size: 15px;
+      background-color: #0077b6;
+      border: none;
+      color: white;
+      border-radius: 6px;
+      transition: background-color 0.3s ease;
+      width: 100%;
+    }
+    button:hover {
+      background-color: #005f86;
+    }
+    #route-distance {
+      font-weight: 600;
+      margin-top: 6px;
+    }
+    /* Yol tarifi paneli tamamen gizli */
+    #directions-panel {
+      display: none !important;
+    }
+    select {
+      font-size: 15px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      width: 100%;
+      margin-bottom: 6px;
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      #control-panel {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        max-width: none;
+        max-height: 40vh;
+        border-radius: 15px 15px 0 0;
+        box-shadow: 0 -3px 8px rgba(0,0,0,0.25);
+        padding: 15px 20px;
+        font-size: 16px;
+        overflow-y: auto;
+      }
+      button {
+        font-size: 16px;
+        padding: 10px;
+      }
+      select {
+        font-size: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="control-panel" aria-label="Kontrol Paneli">
+    <button id="btn-start-sharing" aria-label="Canlı Konum Paylaşımı Başlat">📡 Canlı Konum Paylaş</button>
+    <button id="btn-stop-sharing" disabled aria-label="Canlı Konum Paylaşımını Durdur">⏹️ Canlı Konum Paylaşmayı Durdur</button>
+    <button id="btn-show-my-location" aria-label="Konumumu Göster">📍 Konumumu Göster</button>
+
+    <label for="select-location">Durak Seçin (Mesafe Ölçmek İçin):</label>
+    <select id="select-location" aria-label="Durak Seçimi">
+      <option value="">-- Durak Seçin --</option>
+    </select>
+    <button id="btn-measure-distance" aria-label="Seçilen Durak ile Canlı Konum Arasında Mesafe Ölç">Mesafe Ölç / Rota Göster</button>
+
+    <div id="route-distance" aria-live="polite">Rotanın Uzunluğu: -</div>
+    <div id="nearest-list" aria-live="polite">
+      <p>Konumunuzu gösterin ya da canlı konum paylaşın, en yakın 5 toplanma alanı burada listelenecek.</p>
+    </div>
+  </div>
+
+  <div id="directions-panel" aria-label="Yol Tarifi Paneli" role="region" aria-live="polite" aria-atomic="true">
+    <!-- Panel tamamen gizli olduğu için içerik gösterilmeyecek -->
+  </div>
+
+  <script>
+    const locations = [
+      { "name": "Park Alanı", "lat": 40.7172548694037, "lng": 29.78909339010999 },
+      { "name": "Park Alanı", "lat": 40.7133880219485, "lng": 29.78802166403037 },
+      { "name": "Goncagüller Anaokulu", "lat": 40.71291219028602, "lng": 29.79250164225601 },
+      { "name": "Park Alanı", "lat": 40.71577702334141, "lng": 29.793566655128203 },
+      { "name": "Park Alanı", "lat": 40.71681065303912, "lng": 29.80099924272513 },
+      { "name": "Topçular Parkı", "lat": 40.71477802889666, "lng": 29.80315730896455 },
+      { "name": "Park Alanı", "lat": 40.706561594331376, "lng": 29.80843754746126 },
+      { "name": "Cumhuriyet Parkı", "lat": 40.717753328010666, "lng": 29.824245924826403 },
+      { "name": "Barbaros Hayrettin Lisesi Ve Park", "lat": 40.72075000137805, "lng": 29.83332641191457 },
+      { "name": "Kbb Barbaros Hayrettin Parkı", "lat": 40.72107689698809, "lng": 29.839384578932357 },
+      { "name": "Gölcük Mesleki Ve Teknik Anadolu Lisesi", "lat": 40.71608601968252, "lng": 29.83591917243865 },
+      { "name": "Tersane İlkokulu", "lat": 40.71316602821474, "lng": 29.82294133464367 },
+      { "name": "Park Alanı", "lat": 40.70731683998005, "lng": 29.83199555750598 },
+      { "name": "Park Alanı", "lat": 40.70766782517725, "lng": 29.82974668011204 },
+      { "name": "Çağlayan Parkı", "lat": 40.69974691631622, "lng": 29.82112888725091 },
+      { "name": "Park Alanı", "lat": 40.69506946287389, "lng": 29.830068848758096 },
+      { "name": "Şehit Ömer Burak Öğüt Park Alanı", "lat": 40.703413126154736, "lng": 29.83222603795689 },
+      { "name": "Stad Ve Pazar Alanı", "lat": 40.70236186081546, "lng": 29.85274220912267 },
+      { "name": "Narlı Park Alanı", "lat": 40.70147636874806, "lng": 29.855422133360275 },
+      { "name": "Yeşil Alan", "lat": 40.70166407072455, "lng": 29.852595070526704 },
+      { "name": "Park Alanı", "lat": 40.7014561757093, "lng": 29.853954265891332 },
+      { "name": "Park Alanı", "lat": 40.69249178112259, "lng": 29.833379044082243 },
+      { "name": "Park Alanı", "lat": 40.76482419035106, "lng": 29.858209296652888 },
+      { "name": "Park Alanı", "lat": 40.71002489746862, "lng": 29.846569746160647 },
+      { "name": "Park Alanı", "lat": 40.702548146019126, "lng": 29.83950335555621 },
+      { "name": "Park Alanı", "lat": 40.71134712455087, "lng": 29.84489659675348 },
+      { "name": "Park Alanı", "lat": 40.68801032792825, "lng": 29.854427074327756 }
+    ];
+
+    let map;
+    let livePositionMarker = null;
+    let livePositionLatLng = null;
+    let liveTrackingId = null;
+    let routingControl = null;
+    let activePosition = null; // Kullanıcının aktif konumu (manuel veya canlı)
+
+    const defaultCenter = [40.7655, 29.9406];
+
+    const locationIcon = L.icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41]
+    });
+
+    const activeUserIcon = L.icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41]
+    });
+
+    function initMap() {
+      map = L.map('map').setView(defaultCenter, 11);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      // Durakları işaretle
+      locations.forEach(loc => {
+        const marker = L.marker([loc.lat, loc.lng], {icon: locationIcon});
+        const popupContent = document.createElement('div');
+        const title = document.createElement('h3');
+        title.textContent = loc.name;
+        popupContent.appendChild(title);
+
+        const routeBtn = document.createElement('button');
+        routeBtn.textContent = 'Rota Oluştur';
+        routeBtn.style.marginRight = '5px';
+        routeBtn.addEventListener('click', () => calculateRoute(loc.lat, loc.lng));
+        popupContent.appendChild(routeBtn);
+
+        const googleBtn = document.createElement('button');
+        googleBtn.textContent = 'Google Haritalar';
+        googleBtn.addEventListener('click', () => openGoogleMaps(loc.lat, loc.lng));
+        popupContent.appendChild(googleBtn);
+
+        marker.bindPopup(popupContent);
+        marker.addTo(map);
+      });
+
+      // Durakları seçime ekle
+      const select = document.getElementById('select-location');
+      locations.forEach(loc => {
+        const option = document.createElement('option');
+        option.value = `${loc.lat},${loc.lng}`;
+        option.textContent = loc.name;
+        select.appendChild(option);
+      });
+    }
+
+    // Haversine formülü ile mesafe hesaplama (metre)
+    function haversineDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const φ1 = lat1 * Math.PI/180;
+      const φ2 = lat2 * Math.PI/180;
+      const Δφ = (lat2 - lat1) * Math.PI/180;
+      const Δλ = (lon2 - lon1) * Math.PI/180;
+
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+      return R * c;
+    }
+
+    // En yakın 5 toplanma alanını güncelle
+    function updateNearestLocations(currentPos) {
+      if (!currentPos) {
+        document.getElementById('nearest-list').innerHTML = '<p>Konumunuzu gösterin ya da canlı konum paylaşın, en yakın 5 toplanma alanı burada listelenecek.</p>';
+        return;
+      }
+      const distances = locations.map(loc => ({
+        ...loc,
+        distance: haversineDistance(currentPos[0], currentPos[1], loc.lat, loc.lng)
+      })).sort((a,b) => a.distance - b.distance).slice(0,5);
+
+      const listHtml = `<h3>En Yakın 5 Toplanma Alanı</h3><ul>${
+        distances.map(loc => `
+          <li>
+            <strong>${loc.name}</strong><br />
+            Mesafe: ${(loc.distance / 1000).toFixed(2)} km
+            <button class="route-btn" data-lat="${loc.lat}" data-lng="${loc.lng}">Rota</button>
+            <button class="google-maps-btn" data-lat="${loc.lat}" data-lng="${loc.lng}">Google Haritalar</button>
+          </li>`
+        ).join('')
+      }</ul>`;
+
+      document.getElementById('nearest-list').innerHTML = listHtml;
+
+      // Butonlara event atama
+      document.querySelectorAll('.route-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const lat = parseFloat(btn.getAttribute('data-lat'));
+          const lng = parseFloat(btn.getAttribute('data-lng'));
+          calculateRoute(lat, lng);
+        });
+      });
+      document.querySelectorAll('.google-maps-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const lat = parseFloat(btn.getAttribute('data-lat'));
+          const lng = parseFloat(btn.getAttribute('data-lng'));
+          openGoogleMaps(lat, lng);
+        });
+      });
+    }
+
+    // Rota hesaplama ve çizme (panel ve rota adımları gösterilmez)
+    function calculateRoute(lat, lng) {
+      if (!activePosition) {
+        alert('Lütfen önce konumunuzu gösterin veya canlı konum paylaşın.');
+        return;
+      }
+      if (routingControl) {
+        map.removeControl(routingControl);
+        routingControl = null;
+      }
+      routingControl = L.Routing.control({
+        waypoints: [
+          activePosition,
+          L.latLng(lat, lng)
+        ],
+        routeWhileDragging: true,
+        createMarker: () => null,
+        showAlternatives: false,
+        addWaypoints: false,
+        lineOptions: {
+          styles: [{color: 'blue', opacity: 0.7, weight: 5}]
+        },
+        show: false
+      }).addTo(map);
+
+      routingControl.on('routesfound', function(e) {
+        const routes = e.routes;
+        if(routes.length > 0) {
+          const distanceMeters = routes[0].summary.totalDistance;
+          updateRouteDistance(distanceMeters);
+          // Yol tarifi paneli gizli, adımlar gösterilmiyor
+        }
+      });
+    }
+
+    function updateRouteDistance(distanceMeters) {
+      const el = document.getElementById('route-distance');
+      if(distanceMeters == null) {
+        el.textContent = 'Rotanın Uzunluğu: -';
+      } else {
+        el.textContent = `Rotanın Uzunluğu: ${(distanceMeters/1000).toFixed(2)} km`;
+      }
+    }
+
+    function openGoogleMaps(lat, lng) {
+      const url = `https://www.google.com/maps?q=${lat},${lng}`;
+      window.open(url, '_blank');
+    }
+
+    // URL'yi canlı konum ile güncelle
+    function updateURLWithLivePosition(lat, lng) {
+      const url = new URL(window.location);
+      url.searchParams.set('lat', lat);
+      url.searchParams.set('lng', lng);
+      window.history.replaceState({}, '', url);
+    }
+
+    // Kullanıcının manuel konumunu göster
+    function showMyLocation() {
+      if (!navigator.geolocation) {
+        alert('Tarayıcınız konum servislerini desteklemiyor.');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(position => {
+        const latlng = L.latLng(position.coords.latitude, position.coords.longitude);
+        activePosition = latlng;
+
+        if (livePositionMarker && liveTrackingId !== null) {
+          // Canlı takibi durdur
+          stopLiveTracking();
+        }
+
+        if (livePositionMarker) {
+          map.removeLayer(livePositionMarker);
+          livePositionMarker = null;
+        }
+
+        livePositionMarker = L.marker(latlng, {icon: activeUserIcon}).addTo(map).bindPopup('Şu anki konumunuz').openPopup();
+
+        map.flyTo(latlng, 15);
+        updateNearestLocations([latlng.lat, latlng.lng]);
+
+        if(routingControl) {
+          map.removeControl(routingControl);
+          routingControl = null;
+        }
+        updateRouteDistance(null);
+
+        // URL'den canlı konum parametrelerini kaldır
+        const url = new URL(window.location);
+        url.searchParams.delete('lat');
+        url.searchParams.delete('lng');
+        window.history.replaceState({}, '', url);
+
+      }, error => {
+        alert('Konum alınırken hata oluştu veya izin verilmedi.');
+      }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+    }
+
+    // Canlı konum paylaşımını başlat
+    function startLiveTracking() {
+      if (!navigator.geolocation) {
+        alert('Tarayıcınız konum servislerini desteklemiyor.');
+        return;
+      }
+      if (liveTrackingId !== null) {
+        alert('Canlı konum paylaşımı zaten aktif.');
+        return;
+      }
+      liveTrackingId = navigator.geolocation.watchPosition(position => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const latlng = L.latLng(lat, lng);
+        livePositionLatLng = latlng;
+        activePosition = latlng;
+
+        // URL'yi güncelle
+        updateURLWithLivePosition(lat, lng);
+
+        if (livePositionMarker) {
+          livePositionMarker.setLatLng(latlng);
+        } else {
+          livePositionMarker = L.marker(latlng, {icon: activeUserIcon}).addTo(map).bindPopup('Canlı Konumunuz').openPopup();
+        }
+
+        map.panTo(latlng);
+
+        updateNearestLocations([latlng.lat, latlng.lng]);
+
+        if(routingControl) {
+          map.removeControl(routingControl);
+          routingControl = null;
+          updateRouteDistance(null);
+        }
+
+      }, error => {
+        alert('Canlı konum alınamıyor: ' + error.message);
+      }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 });
+
+      document.getElementById('btn-start-sharing').disabled = true;
+      document.getElementById('btn-stop-sharing').disabled = false;
+    }
+
+    // Canlı konum paylaşımını durdur
+    function stopLiveTracking() {
+      if (liveTrackingId !== null) {
+        navigator.geolocation.clearWatch(liveTrackingId);
+        liveTrackingId = null;
+        if (livePositionMarker) {
+          map.removeLayer(livePositionMarker);
+          livePositionMarker = null;
+        }
+        activePosition = null;
+        updateNearestLocations(null);
+        updateRouteDistance(null);
+
+        // URL'den canlı konum parametrelerini kaldır
+        const url = new URL(window.location);
+        url.searchParams.delete('lat');
+        url.searchParams.delete('lng');
+        window.history.replaceState({}, '', url);
+
+        document.getElementById('btn-start-sharing').disabled = false;
+        document.getElementById('btn-stop-sharing').disabled = true;
+      }
+    }
+
+    // Mesafe ölç butonu işlevi
+    function measureDistanceToSelected() {
+      if (!livePositionLatLng) {
+        alert('Lütfen önce "Canlı Konum Paylaş" butonuna basarak konumunuzu paylaşın.');
+        return;
+      }
+      const select = document.getElementById('select-location');
+      const val = select.value;
+      if (!val) {
+        alert('Lütfen bir durak seçin.');
+        return;
+      }
+      const [lat, lng] = val.split(',').map(Number);
+      calculateRoute(lat, lng);
+    }
+
+    window.onload = () => {
+      initMap();
+
+      // Sayfa yüklendiğinde URL'den lat,lng parametrelerini oku
+      const urlParams = new URLSearchParams(window.location.search);
+      const lat = parseFloat(urlParams.get('lat'));
+      const lng = parseFloat(urlParams.get('lng'));
+
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const latlng = L.latLng(lat, lng);
+        activePosition = latlng;
+        livePositionMarker = L.marker(latlng, {icon: activeUserIcon}).addTo(map).bindPopup('Paylaşılan Canlı Konum').openPopup();
+        map.setView(latlng, 15);
+        updateNearestLocations([lat, lng]);
+      }
+
+      document.getElementById('btn-start-sharing').addEventListener('click', startLiveTracking);
+      document.getElementById('btn-stop-sharing').addEventListener('click', stopLiveTracking);
+      document.getElementById('btn-show-my-location').addEventListener('click', showMyLocation);
+      document.getElementById('btn-measure-distance').addEventListener('click', measureDistanceToSelected);
+    };
+
+    // Fonksiyonları global yapıyoruz
+    window.calculateRoute = calculateRoute;
+    window.openGoogleMaps = openGoogleMaps;
+    window.showMyLocation = showMyLocation;
+    window.startLiveTracking = startLiveTracking;
+    window.stopLiveTracking = stopLiveTracking;
+    window.measureDistanceToSelected = measureDistanceToSelected;
+  </script>
+</body>
+</html>
+<!-- partial -->
+  
+</body>
+</html>
